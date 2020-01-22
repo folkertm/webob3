@@ -18,6 +18,7 @@ from urllib.request import urlopen as url_open
 
 urlparse = parse
 
+
 def unquote(string):
     if not string:
         return b""
