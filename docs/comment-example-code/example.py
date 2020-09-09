@@ -1,16 +1,21 @@
 import os
+import re
 import urllib
 import time
-import re
+
 from cPickle import load, dump
-from webob import Request, Response, html_escape
+from webob import Request
+from webob import Response
+from webob import html_escape
 from webob import exc
+from paste.urlparser import StaticURLParser
+from arguments import Arguments
 
 class Commenter(object):
 
     def __init__(self, app, storage_dir):
         self.app = app
-        self.storage_dir = storage_dir
+        self.storage_dir = os.path.abspath(os.path.normpath(storage_dir))
         if not os.path.exists(storage_dir):
             os.makedirs(storage_dir)
 
@@ -20,7 +25,7 @@ class Commenter(object):
             return self.process_comment(req)(environ, start_response)
         # This is the base path of *this* middleware:
         base_url = req.application_url
-        resp = req.get_response(self.app)
+        resp = req.get_response(self.app)  # type: object
         if resp.content_type != 'text/html' or resp.status_code != 200:
             # Not an HTML response, we don't want to
             # do anything to it
@@ -31,8 +36,10 @@ class Commenter(object):
         body = resp.body
         body = self.add_to_end(body, self.format_comments(comments))
         body = self.add_to_end(body, self.submit_form(base_url, req))
-        resp.body = body
+        comment_body = body.encode('ascii')
+        resp.body = comment_body
         return resp(environ, start_response)
+
 
     def get_data(self, url):
         # Double-quoting makes the filename safe
@@ -54,13 +61,13 @@ class Commenter(object):
     def url_filename(self, url):
         return os.path.join(self.storage_dir, urllib.quote(url, ''))
 
-    _end_body_re = re.compile(r'</body.*?>', re.I|re.S)
 
     def add_to_end(self, html, extra_html):
         """
         Adds extra_html to the end of the html page (before </body>)
         """
-        match = self._end_body_re.search(html)
+        _end_body_re = re.compile(r'</body.*?>', re.I | re.S)
+        match = _end_body_re.search(html)
         if not match:
             return html + extra_html
         else:
@@ -115,32 +122,25 @@ class Commenter(object):
         resp = exc.HTTPSeeOther(location=url+'#comment-area')
         return resp
 
+
 if __name__ == '__main__':
-    import optparse
-    parser = optparse.OptionParser(
-        usage='%prog --port=PORT BASE_DIRECTORY'
-        )
-    parser.add_option(
-        '-p', '--port',
-        default='8080',
-        dest='port',
-        type='int',
-        help='Port to serve on (default 8080)')
-    parser.add_option(
-        '--comment-data',
-        default='./comments',
-        dest='comment_data',
-        help='Place to put comment data into (default ./comments/)')
-    options, args = parser.parse_args()
+    program = os.path.basename(__file__)
+    argument_parser = Arguments().get_argument_parser("../arguments.xml", "comment", program)
+    print('\n--- usage ---')
+    argument_parser.print_usage()
+    print('\n--- help ---')
+    argument_parser.print_help()
+    args = argument_parser.parse_args()
     if not args:
-        parser.error('You must give a BASE_DIRECTORY')
-    base_dir = args[0]
-    from paste.urlparser import StaticURLParser
+        argument_parser.error("You must give a BASE_DIRECTORY")
+    base_dir = args.comment_data
     app = StaticURLParser(base_dir)
-    app = Commenter(app, options.comment_data)
+    app = StaticURLParser(args.comment_data)
+    app = Commenter(app, args.comment_data)
     from wsgiref.simple_server import make_server
-    httpd = make_server('localhost', options.port, app)
-    print 'Serving on http://localhost:%s' % options.port
+    httpd = make_server(args.address, args.port, app)
+    print('\n--- What\'s up ---')
+    print 'Serving on http://{0}:{1}'.format(args.address, args.port)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

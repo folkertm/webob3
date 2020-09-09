@@ -4,63 +4,93 @@ from webob import Request, Response
 from webob import exc
 from tempita import HTMLTemplate
 
-VIEW_TEMPLATE = HTMLTemplate("""\
+LIST_TEMPLATE = HTMLTemplate (
+"""\
 <html>
  <head>
   <title>{{page.title}}</title>
  </head>
  <body>
-<h1>{{page.title}}</h1>
-{{if message}}
-<div style="background-color: #99f">{{message}}</div>
-{{endif}}
-
-<div>{{page.content|html}}</div>
-
-<hr>
-<a href="{{req.url}}?action=edit">Edit</a>
- </body>
-</html>
+  <h1>{{page.title}}</h1>
+  {{if message}}
+   <div style="background-color: #99f">{{message}}</div>
+  {{endif}}
+  {{if page.content}}
+    <div>{{page.content|html}}</div>
+  {{endif}}
+  <hr>
+  <a href="{{req.url}}?action=edit">Edit</a>
+  <br>
+  <a href="{{req.url}}?action=view">New</a>
+  <br>
+</body>
+</html>\
 """)
 
-EDIT_TEMPLATE = HTMLTemplate("""\
-<html>
- <head>
-  <title>Edit: {{page.title}}</title>
- </head>
- <body>
-{{if page.exists}}
-<h1>Edit: {{page.title}}</h1>
-{{else}}
-<h1>Create: {{page.title}}</h1>
-{{endif}}
+VIEW_TEMPLATE = HTMLTemplate (
+    """
+    <html>
+     <head>
+      <title>{{page.title}}</title>
+     </head>
+     <body>
+      <h1>{{page.title}}</h1>
+      {{if message}}
+       <div style="background-color: #99f">{{message}}</div>
+      {{endif}}
+      {{if page.content}}
+        <div>{{page.content|html}}</div>
+      {{endif}}
+      <hr>
+      <a href="{{req.url}}?action=edit">Edit</a>
+      <br>
+      <a href="{{req.url}}?action=view">New</a>
+      <br>
+     </body>
+    </html>
+    """)
 
-<form action="{{req.path_url}}" method="POST">
- <input type="hidden" name="mtime" value="{{page.mtime}}">
- Title: <input type="text" name="title" style="width: 70%" value="{{page.title}}"><br>
- Content: <input type="submit" value="Save">
- <a href="{{req.path_url}}">Cancel</a>
-   <br>
- <textarea name="content" style="width: 100%; height: 75%" rows="40">{{page.content}}</textarea>
-   <br>
- <input type="submit" value="Save">
- <a href="{{req.path_url}}">Cancel</a>
-</form>
-</body></html>
-""")
+EDIT_TEMPLATE = HTMLTemplate (
+    """
+    <html>
+     <head>
+      <title>Edit: {{page.title}}</title>
+     </head>
+     <body>
+      {{if page.exists}}
+       <h1>Edit: {{page.title}}</h1>
+      {{else}}
+       <h1>Create: {{page.title}}</h1>
+      {{endif}}
+      <form action="{{req.path_url}}" method="POST">
+       {{if page.exists}}
+        Page MTime: {{page.mtime}}
+        <input type="hidden" name="mtime" value="{{page.mtime}}">
+       {{endif}}
+       Title: <input type="text" name="title" style="width: 70%" value="{{page.title}}">
+       <textarea name="content" style="width: 100%; height: 75%" rows="40">{{page.content}}</textarea>
+       <br>
+       <input type="submit" value="Save">
+       <a href="{{req.path_url}}">Cancel</a>
+      </form>
+     </body>
+    </html>
+    """)
 
 class WikiApp(object):
 
+    list_template = LIST_TEMPLATE
     view_template = VIEW_TEMPLATE
     edit_template = EDIT_TEMPLATE
 
     def __init__(self, storage_dir):
         self.storage_dir = os.path.abspath(os.path.normpath(storage_dir))
 
+
     def __call__(self, environ, start_response):
         req = Request(environ)
         action = req.params.get('action', 'view')
-        page = self.get_page(req.path_info)
+        page = self.get_page(req)
         try:
             try:
                 meth = getattr(self, 'action_%s_%s' % (action, req.method))
@@ -71,10 +101,15 @@ class WikiApp(object):
             resp = e
         return resp(environ, start_response)
 
-    def get_page(self, path):
-        path = path.lstrip('/')
+
+    def get_page(self, req):
+        path = req.path.lstrip('/')
+        params = req.params
         if not path:
             path = 'index'
+        directory_list = os.listdir(self.storage_dir)
+        if directory_list:
+            page_count = directory_list.count('index.html')
         path = os.path.join(self.storage_dir, path)
         path = os.path.normpath(path)
         if path.endswith('/'):
@@ -83,6 +118,7 @@ class WikiApp(object):
             raise exc.HTTPBadRequest("Bad path")
         path += '.html'
         return Page(path)
+
 
     def action_view_GET(self, req, page):
         if not page.exists:
@@ -109,9 +145,9 @@ class WikiApp(object):
                 "The page has been updated since you started editing it")
         page.set(
             title=req.params['title'],
-            content=req.params['content'])
-        resp = exc.HTTPSeeOther(
-            location=req.path_url)
+            content=req.params['content']
+        )
+        resp = exc.HTTPSeeOther(location=req.path_url)
         resp.set_cookie('message', 'Page updated')
         return resp
 
@@ -119,6 +155,7 @@ class WikiApp(object):
         text = self.edit_template.substitute(
             page=page, req=req)
         return Response(text)
+
 
 class Page(object):
     def __init__(self, filename):
@@ -134,7 +171,8 @@ class Page(object):
             # we need to guess the title
             basename = os.path.splitext(os.path.basename(self.filename))[0]
             basename = re.sub(r'[_-]', ' ', basename)
-            return basename.capitalize()
+            #return basename.capitalize()
+            return basename
         content = self.full_content
         match = re.search(r'<title>(.*?)</title>', content, re.I|re.S)
         return match.group(1)
@@ -168,7 +206,10 @@ class Page(object):
             os.makedirs(dir)
         new_content = """<html><head><title>%s</title></head><body>%s</body></html>""" % (
             title, content)
-        f = open(self.filename, 'wb')
+        file_partion = self.filename.rpartition('/')
+        file_title = file_partion[0] + file_partion[1] + title + '.html'  # type: object
+        f = open(file_title, 'wb')
+        #f = open(self.filename, 'wb')
         f.write(new_content)
         f.close()
 
@@ -184,9 +225,10 @@ if __name__ == '__main__':
         type='int',
         help='Port to serve on (default 8080)')
     parser.add_option(
-        '--wiki-data',
+        '-w', '--wiki-data',
         default='./wiki',
         dest='wiki_data',
+        type='str',
         help='Place to put wiki data into (default ./wiki/)')
     options, args = parser.parse_args()
     print 'Writing wiki pages to %s' % options.wiki_data

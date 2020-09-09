@@ -107,17 +107,17 @@ class FileIter(object):
 class DirectoryApp(object):
     """An application that serves up the files in a given directory.
 
-    This will serve index files (by default ``index.html``), or set
+    This will serve index files (by default ``comments``), or set
     ``index_page=None`` to disable this.  If you set
     ``hide_index_with_redirect=True`` (it defaults to False) then
-    requests to, e.g., ``/index.html`` will be redirected to ``/``.
+    requests to, e.g., ``/comments`` will be redirected to ``/``.
 
     To customize `FileApp` instances creation (which is what actually
     serves the responses), override the `make_fileapp` method.
     """
 
     def __init__(
-        self, path, index_page="index.html", hide_index_with_redirect=False, **kw
+        self, path, index_page="comments", hide_index_with_redirect=False, **kw
     ):
         self.path = os.path.abspath(path)
         if not self.path.endswith(os.path.sep):

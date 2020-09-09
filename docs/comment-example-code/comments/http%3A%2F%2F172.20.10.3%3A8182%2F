@@ -1,0 +1,30 @@
+(lp1
+(dp2
+S'homepage'
+p3
+Vhttps://riptutorial.com/de/hadoop
+p4
+sS'name'
+p5
+VErste Schritte mit hadoop
+p6
+sS'comments'
+p7
+VGoogle Suchergebnis
+p8
+sS'time'
+p9
+ctime
+struct_time
+p10
+((I2020
+I9
+I4
+I20
+I50
+I41
+I4
+I248
+I0
+t(dtRp11
+sa.
